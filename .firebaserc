@@ -1,0 +1,14 @@
+{
+  "projects": {},
+  "targets": {
+    "prehome": {
+      "hosting": {
+        "prehome": [
+          "your-firebase-site"
+        ]
+      }
+    }
+  },
+  "etags": {},
+  "dataconnectEmulatorConfig": {}
+}
