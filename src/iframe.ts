@@ -1,5 +1,6 @@
 import configJson from '../src/lib/.prehome-config.json';
 import type { PrehomeConfig } from '../src/lib/types';
+import { hooks } from './lib/hooks';
 
 /**
  * PREHOME SCRIPT
@@ -16,66 +17,60 @@ import type { PrehomeConfig } from '../src/lib/types';
 const buildConfig = configJson as PrehomeConfig;
 
 interface ScriptContext {
-	host: string;
-	platform: 'beyable' | 'standard';
-	rawRoute: string; // ex: "fa/defisc" (pour l'URL)
-	routeName: string; // ex: "fa-defisc" (pour les events et database analytics)
-	maxViews: number;
-	cappingInDays: number;
-	isDev: boolean;
-	prehomeId: string; // ID unique de campagne
+        host: string;
+        platform: 'beyable' | 'standard';
+        rawRoute: string;
+        routeName: string;
+        maxViews: number;
+        cappingInDays: number;
+        isDev: boolean;
+        prehomeId: string;
 }
 
 // État global pour gérer les références DOM
 const state = {
-	iframe: null as HTMLIFrameElement | null,
-	overlay: null as HTMLDivElement | null,
-	isMounted: false
+        iframe: null as HTMLIFrameElement | null,
+        overlay: null as HTMLDivElement | null,
+        isMounted: false
 };
 
 /**
  * Analyse le script tag actuel pour extraire la configuration.
  */
 function parseScriptContext(): ScriptContext {
-	const script =
-		(document.currentScript as HTMLScriptElement) ||
-		document.querySelector('script[data-route], script[data-type]');
+        const script =
+                (document.currentScript as HTMLScriptElement) ||
+                document.querySelector('script[data-route], script[data-type]');
 
-	// Valeurs par défaut
-	const dataset = script?.dataset || {};
-	const platform = dataset.platform === 'beyable' ? 'beyable' : 'standard';
-	const host = dataset.host || 'localhost:5173';
-	// Normalisation des routes
-	const rawRoute = dataset.route || dataset.type || 'default';
-	const routeName = rawRoute.split('/').filter(Boolean).join('-');
+        const dataset = script?.dataset || {};
+        const platform = dataset.platform === 'beyable' ? 'beyable' : 'standard';
+        const host = dataset.host || 'localhost:5173';
+        const rawRoute = dataset.route || dataset.type || 'default';
+        const routeName = rawRoute.split('/').filter(Boolean).join('-');
 
-	// ID Unique (Utilisé pour le Storage et les IDs DOM)
-	const prehomeId = `${buildConfig.clientId}-${routeName}-prehome`;
+        const prehomeId = `${buildConfig.clientId}-${routeName}-prehome`;
 
-	return {
-		platform,
-		rawRoute,
-		routeName,
-		host,
-		// Modification : On force ces valeurs à 0/inutile si c'est Beyable,
-		// pour ne pas "prendre en compte" le capping.
-		maxViews: platform === 'beyable' ? 0 : Number(dataset.maxViews) || 1,
-		cappingInDays: platform === 'beyable' ? 0 : Number(dataset.capping) || 1,
-		isDev: host.includes('localhost') || host.includes('127.0.0.1'),
-		prehomeId
-	};
+        return {
+                platform,
+                rawRoute,
+                routeName,
+                host,
+                maxViews: platform === 'beyable' ? 0 : Number(dataset.maxViews) || 1,
+                cappingInDays: platform === 'beyable' ? 0 : Number(dataset.capping) || 1,
+                isDev: host.includes('localhost') || host.includes('127.0.0.1'),
+                prehomeId
+        };
 }
 
 const ctx = parseScriptContext();
 
 if (ctx.isDev) {
-	console.table(ctx);
+        console.table(ctx);
 }
-// Clés de stockage (LocalStorage / Cookies)
 const STORAGE_KEYS = {
-	viewCount: `${ctx.prehomeId}-view-count`,
-	firstViewDate: `${ctx.prehomeId}-first-view-date`,
-	closedAt: `${ctx.prehomeId}-prehome-closed-at`
+        viewCount: `${ctx.prehomeId}-view-count`,
+        firstViewDate: `${ctx.prehomeId}-first-view-date`,
+        closedAt: `${ctx.prehomeId}-prehome-closed-at`
 };
 
 // =============================================================================
@@ -83,160 +78,147 @@ const STORAGE_KEYS = {
 // =============================================================================
 
 function buildIframeUrl(): string {
-	const urlParams = new URLSearchParams();
-	const script =
-		(document.currentScript as HTMLScriptElement) ||
-		document.querySelector('script[data-route], script[data-type]');
-	if (script?.dataset) {
-		Object.entries(script.dataset).forEach(([key, value]) => {
-			if (value) urlParams.append(key, value);
-		});
-	}
-	urlParams.append('configClientId', buildConfig.clientId);
+        const urlParams = new URLSearchParams();
+        const script =
+                (document.currentScript as HTMLScriptElement) ||
+                document.querySelector('script[data-route], script[data-type]');
+        if (script?.dataset) {
+                Object.entries(script.dataset).forEach(([key, value]) => {
+                        if (value) urlParams.append(key, value);
+                });
+        }
+        urlParams.append('configClientId', buildConfig.clientId);
 
-	const baseUrl = ctx.isDev
-		? `http://${ctx.host}/${ctx.rawRoute}`
-		: `https://${ctx.host}/${ctx.rawRoute}`;
+        const baseUrl = ctx.isDev
+                ? `http://${ctx.host}/${ctx.rawRoute}`
+                : `https://${ctx.host}/${ctx.rawRoute}`;
 
-	return `${baseUrl}?${urlParams.toString()}`;
+        return `${baseUrl}?${urlParams.toString()}`;
 }
 
 const Storage = {
-	set(key: string, value: string | number): void {
-		const val = String(value);
-		try {
-			document.cookie = `${key}=${val}; path=/; SameSite=Lax`;
-		} catch {
-			//
-		}
-		try {
-			localStorage.setItem(key, val);
-		} catch {
-			//
-		}
-	},
-	get(key: string): string {
-		try {
-			const val = localStorage.getItem(key);
-			if (val !== null) return val;
-		} catch {
-			//
-		}
-		try {
-			const match = document.cookie.split('; ').find((row) => row.startsWith(`${key}=`));
-			if (match) return match.split('=')[1];
-		} catch {
-			//
-		}
-		return '';
-	}
+        set(key: string, value: string | number): void {
+                const val = String(value);
+                try {
+                        document.cookie = `${key}=${val}; path=/; SameSite=Lax`;
+                } catch {
+                        //
+                }
+                try {
+                        localStorage.setItem(key, val);
+                } catch {
+                        //
+                }
+        },
+        get(key: string): string {
+                try {
+                        const val = localStorage.getItem(key);
+                        if (val !== null) return val;
+                } catch {
+                        //
+                }
+                try {
+                        const match = document.cookie.split('; ').find((row) => row.startsWith(`${key}=`));
+                        if (match) return match.split('=')[1];
+                } catch {
+                        //
+                }
+                return '';
+        }
 };
 
 // =============================================================================
 // 3. GESTION DU DOM (MOUNT / UNMOUNT)
 // =============================================================================
 
-/**
- * Supprime proprement l'iframe et l'overlay du DOM.
- */
 function unmountPrehome() {
-	// Nettoyage spécifique Beyable (via sélecteur ID strict)
-	if (ctx.platform === 'beyable') {
-		const beyableIframe = document.querySelector(`#your-client-id-${ctx.prehomeId}-iframe`);
-		if (beyableIframe) beyableIframe.remove();
-		window.removeEventListener('BY_before_load', unmountPrehome);
-	}
-	// Nettoyage Standard (via référence mémoire)
-	else {
-		if (state.iframe) state.iframe.remove();
-	}
+        if (ctx.platform === 'beyable') {
+                const beyableIframe = document.querySelector(`#adfinitas-${ctx.prehomeId}-iframe`);
+                if (beyableIframe) beyableIframe.remove();
+                window.removeEventListener('BY_before_load', unmountPrehome);
+        }
+        else {
+                if (state.iframe) state.iframe.remove();
+        }
 
-	if (state.overlay) state.overlay.remove();
+        if (state.overlay) state.overlay.remove();
 
-	// Reset de l'état
-	state.iframe = null;
-	state.overlay = null;
-	state.isMounted = false;
-	document.body.style.overflow = '';
+        state.iframe = null;
+        state.overlay = null;
+        state.isMounted = false;
+        document.body.style.overflow = '';
+        hooks.onUnmount?.(state);
 }
 
-/**
- * Crée et injecte l'iframe et l'overlay dans le DOM.
- */
 function mountPrehome() {
-	// Sécurité anti-doublon
-	if (state.isMounted) return;
-	if (ctx.platform === 'beyable' && document.querySelector(`#your-client-id-${ctx.prehomeId}-iframe`))
-		return;
+        if (state.isMounted) return;
+        if (ctx.platform === 'beyable' && document.querySelector(`#adfinitas-${ctx.prehomeId}-iframe`))
+                return;
 
-	// 1. Création Overlay
-	const overlay = document.createElement('div');
-	Object.assign(overlay.style, {
-		position: 'fixed',
-		top: '0',
-		left: '0',
-		width: '100vw',
-		height: '100vh',
-		backdropFilter: 'blur(5px)',
-		WebkitBackdropFilter: 'blur(5px)',
-		zIndex: '2147483646',
-		pointerEvents: 'none'
-	});
+        const overlay = document.createElement('div');
+        Object.assign(overlay.style, {
+                position: 'fixed',
+                top: '0',
+                left: '0',
+                width: '100vw',
+                height: '100vh',
+                backdropFilter: 'blur(5px)',
+                WebkitBackdropFilter: 'blur(5px)',
+                zIndex: hooks.overlayZIndex || '2147483646',
+                pointerEvents: 'none'
+        });
 
-	// 2. Création Iframe
-	const iframe = document.createElement('iframe');
-	iframe.src = buildIframeUrl();
+        const iframe = document.createElement('iframe');
+        iframe.src = buildIframeUrl();
 
-	// ID Spécifique Beyable (Requis pour leur tracking/gestion)
-	if (ctx.platform === 'beyable') {
-		iframe.id = `your-client-id-${ctx.prehomeId}-iframe`;
-	}
+        if (ctx.platform === 'beyable') {
+                iframe.id = `adfinitas-${ctx.prehomeId}-iframe`;
+        }
 
-	Object.assign(iframe.style, {
-		position: 'fixed',
-		top: '0',
-		left: '0',
-		width: '100vw',
-		height: '100vh',
-		border: 'none',
-		zIndex: '2147483647'
-	});
+        Object.assign(iframe.style, {
+                position: 'fixed',
+                top: '0',
+                left: '0',
+                width: '100vw',
+                height: '100vh',
+                border: 'none',
+                zIndex: hooks.iframeZIndex || '2147483647'
+        });
 
-	// 3. Style CSS (Hack iRaiser)
-	const style = document.createElement('style');
-	style.textContent = `#type-b.arya>iframe:not(.html2canvas-container) { display: block !important; }`;
-	document.head.appendChild(style);
+        const style = document.createElement('style');
+        style.textContent = `#type-b.arya>iframe:not(.html2canvas-container) { display: block !important; }`;
+        document.head.appendChild(style);
 
-	// 4. Injection
-	document.body.style.overflow = 'hidden';
-	document.body.appendChild(overlay);
-	document.body.appendChild(iframe);
+        document.body.style.overflow = 'hidden';
+        document.body.appendChild(overlay);
+        document.body.appendChild(iframe);
 
-	// Mise à jour de l'état
-	state.iframe = iframe;
-	state.overlay = overlay;
-	state.isMounted = true;
+        state.iframe = iframe;
+        state.overlay = overlay;
+        state.isMounted = true;
 
-	document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keydown', handleKeyDown);
 
-	function handleKeyDown(event: KeyboardEvent) {
-		if (event.key === 'Escape') unmountPrehome();
-	}
+        function handleKeyDown(event: KeyboardEvent) {
+                if (event.key === 'Escape') unmountPrehome();
+        }
 
-	// 5. Gestion de la fermeture (Message venant de Svelte)
-	const handleCloseMessage = (event: MessageEvent) => {
-		// Accepte le message spécifique à la route ou le message générique
-		if (event.data?.type === `close-iframe-prehome-${ctx.routeName}`) {
-			// En mode Standard, on enregistre la date de fermeture pour le capping
-			if (ctx.platform !== 'beyable') {
-				Storage.set(STORAGE_KEYS.closedAt, Date.now());
-			}
+        const onMsg = (event: MessageEvent) => {
+                // Hooks client (interception messages custom)
+                hooks.onMessage?.(event, ctx, state);
 
-			unmountPrehome();
-			window.removeEventListener('message', handleCloseMessage);
-		}
-	};
-	window.addEventListener('message', handleCloseMessage);
+                if (event.data?.type === `close-iframe-prehome-${ctx.routeName}`) {
+                        if (ctx.platform !== 'beyable') {
+                                Storage.set(STORAGE_KEYS.closedAt, Date.now());
+                        }
+                        unmountPrehome();
+                        window.removeEventListener('message', onMsg);
+                }
+        };
+        window.addEventListener('message', onMsg);
+
+        // Hook après montage complet
+        hooks.onMount?.(ctx, state);
 }
 
 // =============================================================================
@@ -244,51 +226,41 @@ function mountPrehome() {
 // =============================================================================
 
 function runBeyableMode() {
-	// Mode "passif" : On attend que le script soit exécuté par Beyable.
-	// Pas de vérification de capping interne.
-	try {
-		mountPrehome();
-		// Événement spécifique Beyable pour nettoyer le DOM si nécessaire
-		window.addEventListener('BY_before_load', unmountPrehome);
-	} catch (e) {
-		console.error('[Prehome] Beyable Error:', e);
-	}
+        try {
+                mountPrehome();
+                window.addEventListener('BY_before_load', unmountPrehome);
+        } catch (e) {
+                console.error('[Prehome] Beyable Error:', e);
+        }
 }
 
 function runStandardMode() {
-	// Mode "actif" : On vérifie le capping avant d'afficher.
+        let viewCount = Number(Storage.get(STORAGE_KEYS.viewCount)) || 0;
+        let firstViewDate = Storage.get(STORAGE_KEYS.firstViewDate);
+        const now = Date.now();
 
-	// 1. Lecture du Capping
-	let viewCount = Number(Storage.get(STORAGE_KEYS.viewCount)) || 0;
-	let firstViewDate = Storage.get(STORAGE_KEYS.firstViewDate);
-	const now = Date.now();
+        let daysSinceFirstView = 0;
+        if (firstViewDate) {
+                const startDate = new Date(firstViewDate).getTime();
+                daysSinceFirstView = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+        }
 
-	// 2. Calcul de l'expiration
-	let daysSinceFirstView = 0;
-	if (firstViewDate) {
-		const startDate = new Date(firstViewDate).getTime();
-		daysSinceFirstView = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
-	}
+        if (!firstViewDate || daysSinceFirstView >= ctx.cappingInDays) {
+                viewCount = 0;
+                firstViewDate = new Date().toISOString();
+                Storage.set(STORAGE_KEYS.viewCount, '0');
+                Storage.set(STORAGE_KEYS.firstViewDate, firstViewDate);
+                Storage.set(STORAGE_KEYS.closedAt, '');
+        }
 
-	// 3. Reset si période expirée (Cycle de capping terminé)
-	if (!firstViewDate || daysSinceFirstView >= ctx.cappingInDays) {
-		viewCount = 0;
-		firstViewDate = new Date().toISOString();
-		Storage.set(STORAGE_KEYS.viewCount, '0');
-		Storage.set(STORAGE_KEYS.firstViewDate, firstViewDate);
-		Storage.set(STORAGE_KEYS.closedAt, ''); // Reset du cookie de fermeture
-	}
+        const shouldShow = viewCount < ctx.maxViews;
 
-	// 4. Décision d'affichage
-	const shouldShow = viewCount < ctx.maxViews;
-
-	if (shouldShow) {
-		// On incrémente AVANT d'afficher pour éviter les boucles en cas d'erreur
-		Storage.set(STORAGE_KEYS.viewCount, viewCount + 1);
-		mountPrehome();
-	} else {
-		if (ctx.isDev) console.log(`[Prehome] Capping atteint (${viewCount}/${ctx.maxViews} vues).`);
-	}
+        if (shouldShow) {
+                Storage.set(STORAGE_KEYS.viewCount, viewCount + 1);
+                mountPrehome();
+        } else {
+                if (ctx.isDev) console.log(`[Prehome] Capping atteint (${viewCount}/${ctx.maxViews} vues).`);
+        }
 }
 
 // =============================================================================
@@ -296,9 +268,9 @@ function runStandardMode() {
 // =============================================================================
 
 (function init() {
-	if (ctx.platform === 'beyable') {
-		runBeyableMode();
-	} else {
-		runStandardMode();
-	}
+        if (ctx.platform === 'beyable') {
+                runBeyableMode();
+        } else {
+                runStandardMode();
+        }
 })();
